@@ -591,7 +591,6 @@ void wake_up_sleeping_threads(int64_t current_ticks) {
 
         if (t->status == THREAD_BLOCKED && t->wakeup_time <= current_ticks) {
             t->wakeup_time = INT64_MAX;
-//            t->status = THREAD_READY;
             thread_unblock(t);
         }
     }

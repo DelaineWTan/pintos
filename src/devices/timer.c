@@ -171,7 +171,6 @@ timer_print_stats (void)
 }
 
 
-extern struct list all_list;
 
 /* Timer interrupt handler. */
 static void
