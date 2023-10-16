@@ -583,6 +583,7 @@ allocate_tid (void)
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
 
+/* Checks all threads for threads that need to be woken up, and called thread_unblock on them */
 void wake_up_sleeping_threads(int64_t current_ticks) {
     struct list_elem *e;
 
