@@ -1,0 +1,113 @@
+
+
+                         +-----------------+
+                         |    COMP 7035    |
+                         | ASSIGNMENT 1 P2 |
+                         | DESIGN DOCUMENT |
+                         +-----------------+
+
+---- GROUP ----
+
+Delaine Tan <A01016071>
+
+---- PRELIMINARIES ----
+
+The video tutorial on threads by Thierry Sans (https://www.youtube.com/watch?v=4C8J6jLPJPc) was an immense help.
+Consulted the documentation at https://www.scs.stanford.edu/23wi-cs212/reference/index.html.
+Exchanged help with Jaskaran Chahal <A00965733>, was able to reach the solution a lot faster.
+
+
+                              timer_sleep
+                                 ====
+
+---- DATA STRUCTURES ----
+Added to struct thread:
+    struct thread
+      {
+        /* Owned by thread.c. */
+        tid_t tid;                          /* Thread identifier. */
+        ...
+        int64_t wakeup_time;                /* Time left to wake up for sleeping threads */
+        ...
+      }
+A new function wake_up_sleeping_threads, checks all threads for sleeping threads that should
+be woken up with thread_unblock, to be called in timer_interrupt:
+    void wake_up_sleeping_threads(int64_t current_ticks);
+
+
+---- ALGORITHMS ----
+
+>> Briefly describe your implementation of thread_join() and how it
+>> interacts with thread termination.
+
+The timer_sleep re-implementation now sets the ticks argument as the thread->wake_up time and disables interrupts briefly
+for atomic operations to call thread_block on it:
+    /* timer.c */
+    /* Sleeps for approximately TICKS timer ticks.  Interrupts must
+       be turned on. */
+    void
+    timer_sleep (int64_t ticks)
+    {
+      int64_t start = timer_ticks ();
+
+      ASSERT (intr_get_level () == INTR_ON);
+      struct thread *current_thread = thread_current();
+      current_thread->wakeup_time = start + ticks;
+
+      enum intr_level old_level = intr_disable();
+      thread_block();
+      intr_set_level(old_level);
+    }
+For sleeping threads to wake up correctly, a call to wake_up_sleeping_threads is called in timer_interrupt:
+    /* timer.c */
+    /* Timer interrupt handler. */
+    static void
+    timer_interrupt (struct intr_frame *args UNUSED)
+    {
+      ticks++;
+      wake_up_sleeping_threads(ticks);
+      thread_tick ();
+    }
+The wake_up_sleeping_threads function checks all threads for threads that should be woken up:
+    /* Checks all threads for threads that need to be woken up, and called thread_unblock on them */
+    void wake_up_sleeping_threads(int64_t current_ticks) {
+        struct list_elem *e;
+
+        for (e = list_begin(&all_list); e != list_end(&all_list); e = list_next(e)) {
+            struct thread *t = list_entry(e, struct thread, allelem);
+
+            if (t->status == THREAD_BLOCKED && t->wakeup_time <= current_ticks) {
+                t->wakeup_time = INT64_MAX;
+                thread_unblock(t);
+            }
+        }
+    }
+---- SYNCHRONIZATION ----
+Synchronicity is maintained by disabling interrupts before blocking a thread that is meant to go to sleep, then
+re-enabling them afterwards. This ensures the thread is blocked (and blocked exactly once) before the next timer_interrupt
+occurs, avoiding race conditions.
+
+
+---- RATIONALE ----
+Advantages:
+    1. Efficient CPU Utilization: The primary advantage is that the modified timer_sleep function allows threads to sleep
+    efficiently. Rather than busy-waiting, which consumes CPU cycles, threads can go into a truly idle state. This efficient
+    CPU utilization is crucial for a well-behaved operating system.
+    2. Reduced Energy Consumption: By avoiding busy-waiting, the system reduces unnecessary power consumption. This is
+    especially important in battery-powered devices and energy-conscious environments.
+    3. Improved Responsiveness: The modified function enables the system to respond to other tasks and events while threads
+    are sleeping. This can lead to better system responsiveness and multitasking capabilities.
+    4. More Predictable: Threads can sleep for a precise amount of time, leading to more predictable and deterministic
+    behavior, making it suitable for real-time applications.
+Disadvantages:
+    1. Complexity: The modified design may introduce additional complexity in the code. It requires the tracking of wake-up
+    times and the use of semaphores or similar mechanisms to block and unblock threads.
+    2. Potential for Bugs: Any increase in complexity can introduce the potential for bugs, including race conditions,
+    deadlocks, and priority inversion issues.
+    3. Overhead: There may be some overhead associated with managing the sleep-wake cycle for threads. Although minimal,
+    it's something to consider.
+    4. Dependency on Semaphores: Depending on the implementation, the modified timer_sleep function may rely on semaphores
+    or other synchronization primitives. This adds an additional layer of dependency and complexity.
+In summary, the design of the modified timer_sleep function is advantageous for efficiency, power consumption, and
+responsiveness. However, it also introduces some complexity and potential for issues that need to be carefully managed
+to ensure the correct and reliable operation of the operating system.
